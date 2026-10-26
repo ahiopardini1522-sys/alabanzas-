@@ -1,189 +1,323 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#111111">
-<link rel="manifest" href="manifest.json">
-<title>Alabanza Karaoke</title>
-<style>
-  * { box-sizing: border-box; }
-  body { margin: 0; font-family: sans-serif; background: #111; color: #eee; }
-  header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #1e1e1e; }
-  header h1 { flex: 1; font-size: 20px; margin: 0; }
-  button { background: #f5b301; color: #000; border: 0; border-radius: 10px; padding: 12px 16px; font-size: 16px; font-weight: bold; }
-  button.sec { background: #333; color: #eee; }
-  input, textarea { width: 100%; padding: 12px; margin: 6px 0; border-radius: 8px; border: 1px solid #444; background: #222; color: #eee; font-size: 16px; }
-  textarea { min-height: 260px; }
-  .pantalla { display: none; }
-  .pantalla.activa { display: block; }
-  .cancion { display: flex; align-items: center; padding: 16px; border-bottom: 1px solid #333; font-size: 20px; }
-  .cancion span { flex: 1; }
-  .form { padding: 16px; }
-  #contenedor { display: flex; flex-direction: column; height: calc(100vh - 62px); }
-  #video { width: 100%; aspect-ratio: 16/9; background: #000; }
-  #video iframe { width: 100%; height: 100%; }
-  #letra { flex: 1; overflow-y: auto; padding: 40vh 16px; text-align: center; scroll-behavior: smooth; }
-  .linea { font-size: 28px; line-height: 1.7; color: #777; transition: all .25s; }
-  .linea.activa { font-size: 38px; font-weight: bold; color: #f5b301; }
-  #botonMarcar { display: none; position: fixed; right: 20px; bottom: 20px; width: 90px; height: 90px; border-radius: 50%; font-size: 30px; }
-  #botonMarcar.visible { display: block; }
-  @media (min-width: 800px) {
-    #contenedor { flex-direction: row; }
-    #video { width: 40%; align-self: flex-start; margin-top: 20px; }
-    #letra { flex: 1; }
-    .linea { font-size: 36px; }
-    .linea.activa { font-size: 52px; }
+import 'dart:async'; sea
+import 'dart:convert';
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
+
+void main() => runApp(const AlabanzaApp());
+
+class AlabanzaApp extends StatelessWidget {
+  const AlabanzaApp({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Alabanza Karaoke',
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark(useMaterial3: true),
+      home: const ListaCanciones(),
+    );
   }
-</style>
-</head>
-<body>
-
-<div id="lista" class="pantalla activa">
-  <header><h1>Mis alabanzas</h1><button onclick="mostrar('nueva')">+ Nueva</button></header>
-  <div id="canciones"></div>
-</div>
-
-<div id="nueva" class="pantalla">
-  <header><button class="sec" onclick="mostrar('lista')">←</button><h1>Nueva canción</h1></header>
-  <div class="form">
-    <input id="titulo" placeholder="Título">
-    <input id="url" placeholder="Enlace de YouTube">
-    <textarea id="texto" placeholder="Letra, una línea por renglón"></textarea>
-    <button onclick="guardarNueva()">Guardar</button>
-  </div>
-</div>
-
-<div id="reproductor" class="pantalla">
-  <header>
-    <button class="sec" onclick="salir()">←</button>
-    <h1 id="nombre"></h1>
-    <button class="sec" id="btnCaptura" onclick="alternarCaptura()">⏱ Marcar</button>
-  </header>
-  <div id="contenedor">
-    <div id="video"><div id="yt"></div></div>
-    <div id="letra"></div>
-  </div>
-  <button id="botonMarcar" onclick="marcar()">🚩</button>
-</div>
-
-<script src="https://www.youtube.com/iframe_api"></script>
-<script>
-let canciones = JSON.parse(localStorage.getItem('canciones') || '[]');
-let actual = null, indice = 0, player = null, reloj = null;
-let captura = false, siguiente = 0, apiLista = false;
-
-function onYouTubeIframeAPIReady() { apiLista = true; }
-
-function mostrar(id) {
-  document.querySelectorAll('.pantalla').forEach(p => p.classList.remove('activa'));
-  document.getElementById(id).classList.add('activa');
-  if (id === 'lista') pintarLista();
 }
 
-function guardarTodo() { localStorage.setItem('canciones', JSON.stringify(canciones)); }
+class Cancion {
+  String titulo;
+  String videoId;
+  List<String> lineas;
+  List<double> tiempos; // segundos de inicio de cada línea
 
-function pintarLista() {
-  const div = document.getElementById('canciones');
-  div.innerHTML = '';
-  if (!canciones.length) div.innerHTML = '<p style="padding:16px">Agrega tu primera alabanza con el botón Nueva.</p>';
-  canciones.forEach((c, i) => {
-    const f = document.createElement('div');
-    f.className = 'cancion';
-    f.innerHTML = '<span>🎵 ' + c.titulo + '</span>';
-    f.querySelector('span').onclick = () => abrir(i);
-    const b = document.createElement('button');
-    b.className = 'sec'; b.textContent = '🗑';
-    b.onclick = () => { if (confirm('¿Borrar esta canción?')) { canciones.splice(i, 1); guardarTodo(); pintarLista(); } };
-    f.appendChild(b);
-    div.appendChild(f);
+  Cancion({
+    required this.titulo,
+    required this.videoId,
+    required this.lineas,
+    required this.tiempos,
   });
+
+  Map<String, dynamic> toJson() => {
+        'titulo': titulo,
+        'videoId': videoId,
+        'lineas': lineas,
+        'tiempos': tiempos,
+      };
+
+  factory Cancion.fromJson(Map<String, dynamic> j) => Cancion(
+        titulo: j['titulo'],
+        videoId: j['videoId'],
+        lineas: List<String>.from(j['lineas']),
+        tiempos: List<double>.from(j['tiempos'].map((e) => (e as num).toDouble())),
+      );
 }
 
-function extraerId(url) {
-  url = url.trim();
-  const m = url.match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([A-Za-z0-9_-]{11})/);
-  return m ? m[1] : url;
+String extraerVideoId(String url) {
+  final u = Uri.tryParse(url.trim());
+  if (u == null) return url.trim();
+  if (u.host.contains('youtu.be')) return u.pathSegments.first;
+  return u.queryParameters['v'] ?? url.trim();
 }
 
-function guardarNueva() {
-  const titulo = document.getElementById('titulo').value.trim();
-  const lineas = document.getElementById('texto').value.split('\n').map(l => l.trim()).filter(l => l);
-  if (!titulo || !lineas.length) { alert('Falta el título o la letra'); return; }
-  canciones.push({ titulo, videoId: extraerId(document.getElementById('url').value), lineas, tiempos: lineas.map(() => -1) });
-  guardarTodo();
-  document.getElementById('titulo').value = '';
-  document.getElementById('url').value = '';
-  document.getElementById('texto').value = '';
-  mostrar('lista');
+class ListaCanciones extends StatefulWidget {
+  const ListaCanciones({super.key});
+  @override
+  State<ListaCanciones> createState() => _ListaCancionesState();
 }
 
-function abrir(i) {
-  if (!apiLista) { alert('Espera un momento, cargando YouTube...'); return; }
-  actual = canciones[i];
-  indice = 0; captura = false; siguiente = 0;
-  document.getElementById('nombre').textContent = actual.titulo;
-  document.getElementById('botonMarcar').classList.remove('visible');
-  pintarLetra();
-  mostrar('reproductor');
-  if (player) player.destroy();
-  document.getElementById('video').innerHTML = '<div id="yt"></div>';
-  player = new YT.Player('yt', { videoId: actual.videoId, playerVars: { playsinline: 1, rel: 0 } });
-  reloj = setInterval(actualizar, 250);
-}
+class _ListaCancionesState extends State<ListaCanciones> {
+  List<Cancion> canciones = [];
 
-function salir() {
-  clearInterval(reloj);
-  if (player) { player.destroy(); player = null; }
-  mostrar('lista');
-}
-
-function pintarLetra() {
-  const l = document.getElementById('letra');
-  l.innerHTML = '';
-  actual.lineas.forEach((t, i) => {
-    const d = document.createElement('div');
-    d.className = 'linea'; d.id = 'l' + i; d.textContent = t;
-    l.appendChild(d);
-  });
-}
-
-function resaltar(i) {
-  document.querySelectorAll('.linea').forEach(x => x.classList.remove('activa'));
-  const el = document.getElementById('l' + i);
-  if (el) { el.classList.add('activa'); el.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
-  indice = i;
-}
-
-function actualizar() {
-  if (captura || !player || !player.getCurrentTime) return;
-  const t = player.getCurrentTime();
-  let idx = -1;
-  for (let i = 0; i < actual.tiempos.length; i++) {
-    if (actual.tiempos[i] >= 0 && actual.tiempos[i] <= t) idx = i;
+  @override
+  void initState() {
+    super.initState();
+    cargar();
   }
-  if (idx >= 0 && idx !== indice) resaltar(idx);
+
+  Future<void> cargar() async {
+    final p = await SharedPreferences.getInstance();
+    final data = p.getString('canciones');
+    if (data != null) {
+      final lista = jsonDecode(data) as List;
+      setState(() => canciones = lista.map((e) => Cancion.fromJson(e)).toList());
+    }
+  }
+
+  Future<void> guardar() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString('canciones', jsonEncode(canciones.map((c) => c.toJson()).toList()));
+  }
+
+  Future<void> nueva() async {
+    final c = await Navigator.push<Cancion>(
+      context,
+      MaterialPageRoute(builder: (_) => const EditorCancion()),
+    );
+    if (c != null) {
+      setState(() => canciones.add(c));
+      await guardar();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Mis alabanzas')),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: nueva,
+        icon: const Icon(Icons.add),
+        label: const Text('Nueva canción'),
+      ),
+      body: canciones.isEmpty
+          ? const Center(child: Text('Agrega tu primera alabanza'))
+          : ListView.builder(
+              itemCount: canciones.length,
+              itemBuilder: (_, i) {
+                final c = canciones[i];
+                return ListTile(
+                  leading: const Icon(Icons.music_note),
+                  title: Text(c.titulo, style: const TextStyle(fontSize: 20)),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => Reproductor(cancion: c)),
+                  ),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.delete_outline),
+                    onPressed: () async {
+                      setState(() => canciones.removeAt(i));
+                      await guardar();
+                    },
+                  ),
+                );
+              },
+            ),
+    );
+  }
 }
 
-function alternarCaptura() {
-  captura = !captura;
-  siguiente = 0;
-  document.getElementById('botonMarcar').classList.toggle('visible', captura);
-  document.getElementById('btnCaptura').textContent = captura ? '✓ Listo' : '⏱ Marcar';
-  if (captura) { actual.tiempos = actual.lineas.map(() => -1); resaltar(0); }
-  else guardarTodo();
+class EditorCancion extends StatefulWidget {
+  const EditorCancion({super.key});
+  @override
+  State<EditorCancion> createState() => _EditorCancionState();
 }
 
-function marcar() {
-  if (siguiente >= actual.lineas.length) return;
-  actual.tiempos[siguiente] = player.getCurrentTime();
-  resaltar(siguiente);
-  siguiente++;
-  guardarTodo();
+class _EditorCancionState extends State<EditorCancion> {
+  final titulo = TextEditingController();
+  final url = TextEditingController();
+  final letra = TextEditingController();
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Nueva canción')),
+      body: Padding(
+        padding: const EdgeInsets.all(16),
+        child: ListView(
+          children: [
+            TextField(controller: titulo, decoration: const InputDecoration(labelText: 'Título')),
+            TextField(controller: url, decoration: const InputDecoration(labelText: 'Enlace de YouTube')),
+            TextField(
+              controller: letra,
+              maxLines: 15,
+              decoration: const InputDecoration(
+                labelText: 'Letra (una línea por renglón)',
+                alignLabelWithHint: true,
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: () {
+                final lineas = letra.text.split('\n').where((l) => l.trim().isNotEmpty).toList();
+                if (titulo.text.isEmpty || lineas.isEmpty) return;
+                Navigator.pop(
+                  context,
+                  Cancion(
+                    titulo: titulo.text,
+                    videoId: extraerVideoId(url.text),
+                    lineas: lineas,
+                    tiempos: List.filled(lineas.length, -1),
+                  ),
+                );
+              },
+              child: const Text('Guardar'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
-pintarLista();
-</script>
-</body>
-</html>
+class Reproductor extends StatefulWidget {
+  final Cancion cancion;
+  const Reproductor({super.key, required this.cancion});
+  @override
+  State<Reproductor> createState() => _ReproductorState();
+}
+
+class _ReproductorState extends State<Reproductor> {
+  late YoutubePlayerController yt;
+  final scroll = ScrollController();
+  Timer? reloj;
+  int actual = 0;
+  bool modoCaptura = false;
+  int siguienteCaptura = 0;
+  final List<GlobalKey> claves = [];
+
+  Cancion get c => widget.cancion;
+
+  @override
+  void initState() {
+    super.initState();
+    claves.addAll(List.generate(c.lineas.length, (_) => GlobalKey()));
+    yt = YoutubePlayerController.fromVideoId(
+      videoId: c.videoId,
+      autoPlay: false,
+      params: const YoutubePlayerParams(showFullscreenButton: true),
+    );
+    reloj = Timer.periodic(const Duration(milliseconds: 250), (_) => actualizar());
+  }
+
+  Future<void> actualizar() async {
+    if (modoCaptura) return;
+    final t = await yt.currentTime;
+    int idx = 0;
+    for (int i = 0; i < c.tiempos.length; i++) {
+      if (c.tiempos[i] >= 0 && c.tiempos[i] <= t) idx = i;
+    }
+    if (idx != actual) {
+      setState(() => actual = idx);
+      final ctx = claves[idx].currentContext;
+      if (ctx != null) {
+        Scrollable.ensureVisible(ctx,
+            alignment: 0.4, duration: const Duration(milliseconds: 400));
+      }
+    }
+  }
+
+  Future<void> marcar() async {
+    if (siguienteCaptura >= c.lineas.length) return;
+    final t = await yt.currentTime;
+    setState(() {
+      c.tiempos[siguienteCaptura] = t;
+      actual = siguienteCaptura;
+      siguienteCaptura++;
+    });
+    final p = await SharedPreferences.getInstance();
+    final data = p.getString('canciones');
+    if (data != null) {
+      final lista = (jsonDecode(data) as List).map((e) => Cancion.fromJson(e)).toList();
+      for (final x in lista) {
+        if (x.videoId == c.videoId && x.titulo == c.titulo) x.tiempos = c.tiempos;
+      }
+      await p.setString('canciones', jsonEncode(lista.map((e) => e.toJson()).toList()));
+    }
+  }
+
+  @override
+  void dispose() {
+    reloj?.cancel();
+    yt.close();
+    super.dispose();
+  }
+
+  Widget letraWidget() {
+    return ListView.builder(
+      controller: scroll,
+      padding: const EdgeInsets.symmetric(vertical: 120, horizontal: 20),
+      itemCount: c.lineas.length,
+      itemBuilder: (_, i) {
+        final activa = i == actual;
+        return AnimatedDefaultTextStyle(
+          key: claves[i],
+          duration: const Duration(milliseconds: 250),
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: activa ? 38 : 28,
+            fontWeight: activa ? FontWeight.bold : FontWeight.normal,
+            color: activa ? Colors.amber : Colors.white54,
+            height: 1.8,
+          ),
+          child: Text(c.lineas[i], textAlign: TextAlign.center),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ancho = MediaQuery.of(context).size.width;
+    final esTableta = ancho > 700;
+    final video = YoutubePlayer(controller: yt, aspectRatio: 16 / 9);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(c.titulo),
+        actions: [
+          IconButton(
+            tooltip: 'Modo captura de tiempos',
+            icon: Icon(modoCaptura ? Icons.check_circle : Icons.timer),
+            onPressed: () => setState(() {
+              modoCaptura = !modoCaptura;
+              siguienteCaptura = 0;
+            }),
+          ),
+        ],
+      ),
+      floatingActionButton: modoCaptura
+          ? FloatingActionButton.large(
+              onPressed: marcar,
+              child: const Icon(Icons.flag),
+            )
+          : null,
+      body: esTableta
+          ? Row(
+              children: [
+                Expanded(flex: 2, child: Center(child: video)),
+                Expanded(flex: 3, child: letraWidget()),
+              ],
+            )
+          : Column(
+              children: [
+                video,
+                Expanded(child: letraWidget()),
+              ],
+            ),
+    );
+  }
+}
