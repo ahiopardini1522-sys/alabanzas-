@@ -1,1 +1,16 @@
-Archivo\u2026</paragraph><codeBlock id='.13011' h='6f7c530a' language='html'>&lt;!DOCTYPE \u2026</codeBlock><paragraph id='.20267' h='0a115c60' heading='2'>C.
+{
+  "name": "Alabanza Karaoke",
+  "short_name": "Alabanza",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#111111",
+  "theme_color": "#111111",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/26/26805.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
