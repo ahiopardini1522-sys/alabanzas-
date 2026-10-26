@@ -1,3 +1,4 @@
+```html
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -9,9 +10,9 @@
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; font-family: sans-serif; background: #111; color: #eee; }
-  header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: #1e1e1e; }
-  header h1 { flex: 1; font-size: 20px; margin: 0; }
-  button { background: #f5b301; color: #000; border: 0; border-radius: 10px; padding: 12px 16px; font-size: 16px; font-weight: bold; }
+  header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; background: #1e1e1e; }
+  header h1 { flex: 1; font-size: 20px; margin: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  button { background: #f5b301; color: #000; border: 0; border-radius: 10px; padding: 12px 14px; font-size: 16px; font-weight: bold; }
   button.sec { background: #333; color: #eee; }
   input, textarea { width: 100%; padding: 12px; margin: 6px 0; border-radius: 8px; border: 1px solid #444; background: #222; color: #eee; font-size: 16px; }
   textarea { min-height: 220px; }
@@ -26,14 +27,16 @@
   #contenedor { display: flex; flex-direction: column; height: calc(100vh - 62px); }
   #video { width: 100%; aspect-ratio: 16/9; background: #000; }
   #video iframe { width: 100%; height: 100%; }
+  #video.oculto { width: 160px; height: 90px; aspect-ratio: auto; position: fixed; left: 8px; bottom: 8px; opacity: 0.35; z-index: 5; }
   #letra { flex: 1; overflow-y: auto; padding: 40vh 16px; text-align: center; scroll-behavior: smooth; }
   .linea { font-size: 28px; line-height: 1.7; color: #777; transition: all .25s; }
   .linea.activa { font-size: 38px; font-weight: bold; color: #f5b301; }
-  #botonMarcar { display: none; position: fixed; right: 20px; bottom: 20px; width: 90px; height: 90px; border-radius: 50%; font-size: 30px; }
+  #botonMarcar { display: none; position: fixed; right: 20px; bottom: 20px; width: 90px; height: 90px; border-radius: 50%; font-size: 30px; z-index: 6; }
   #botonMarcar.visible { display: block; }
   @media (min-width: 800px) {
     #contenedor { flex-direction: row; }
     #video { width: 40%; align-self: flex-start; margin-top: 20px; }
+    #video.oculto { width: 160px; margin-top: 0; }
     #letra { flex: 1; }
     .linea { font-size: 36px; }
     .linea.activa { font-size: 52px; }
@@ -65,6 +68,7 @@
   <header>
     <button class="sec" onclick="salir()">←</button>
     <h1 id="nombre"></h1>
+    <button class="sec" id="btnVideo" onclick="alternarVideo()">🎥 Video</button>
     <button class="sec" id="btnCaptura" onclick="alternarCaptura()">⏱ Marcar</button>
   </header>
   <div id="contenedor">
@@ -80,6 +84,7 @@ let canciones = JSON.parse(localStorage.getItem('canciones') || '[]');
 let actual = null, indice = 0, player = null, reloj = null;
 let captura = false, siguiente = 0, apiLista = false;
 let tiemposNuevos = null;
+let videoOculto = localStorage.getItem('videoOculto') === '1';
 
 function onYouTubeIframeAPIReady() { apiLista = true; }
 
@@ -90,6 +95,17 @@ function mostrar(id) {
 }
 
 function guardarTodo() { localStorage.setItem('canciones', JSON.stringify(canciones)); }
+
+function aplicarVideo() {
+  document.getElementById('video').classList.toggle('oculto', videoOculto);
+  document.getElementById('btnVideo').textContent = videoOculto ? '🎥 Mostrar' : '🎥 Ocultar';
+}
+
+function alternarVideo() {
+  videoOculto = !videoOculto;
+  localStorage.setItem('videoOculto', videoOculto ? '1' : '0');
+  aplicarVideo();
+}
 
 function pintarLista() {
   const div = document.getElementById('canciones');
@@ -190,6 +206,7 @@ function abrir(i) {
   mostrar('reproductor');
   if (player) player.destroy();
   document.getElementById('video').innerHTML = '<div id="yt"></div>';
+  aplicarVideo();
   player = new YT.Player('yt', { videoId: actual.videoId, playerVars: { playsinline: 1, rel: 0 } });
   clearInterval(reloj);
   reloj = setInterval(actualizar, 250);
@@ -250,3 +267,4 @@ pintarLista();
 </script>
 </body>
 </html>
+```
